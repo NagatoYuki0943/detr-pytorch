@@ -51,7 +51,7 @@ class TransformerEncoderLayer(nn.Module):
         self.linear1    = nn.Linear(d_model, dim_feedforward)
         self.dropout    = nn.Dropout(dropout)
         self.linear2    = nn.Linear(dim_feedforward, d_model)
-        
+
         self.norm1      = nn.LayerNorm(d_model)
         self.norm2      = nn.LayerNorm(d_model)
         self.dropout1   = nn.Dropout(dropout)
@@ -77,7 +77,7 @@ class TransformerEncoderLayer(nn.Module):
         # 添加残差结构
         # 625, batch_size, 256 => 625, batch_size, 256
         src = src + self.dropout1(src2)
-        
+
         # 添加FFN结构
         # 625, batch_size, 256 => 625, batch_size, 2048 => 625, batch_size, 256
         src = self.norm1(src)
@@ -207,7 +207,7 @@ class TransformerDecoderLayer(nn.Module):
         # 100, batch_size, 256 => 100, batch_size, 256
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
-         
+
         #---------------------------------------------#
         #   做一个FFN
         #---------------------------------------------#
@@ -292,7 +292,7 @@ class Transformer(nn.Module):
         mask        = mask.flatten(1)
         # 100, batch_size, 256
         tgt         = torch.zeros_like(query_embed)
-        
+
         # 625, batch_size, 256 => 625, batch_size, 256
         memory      = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
         # 625, batch_size, 256 => 6, 100, batch_size, 256

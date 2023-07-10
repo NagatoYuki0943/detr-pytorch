@@ -37,7 +37,7 @@ class HungarianMatcher(nn.Module):
         # [batch_size * num_queries, num_classes]
         out_prob = outputs["pred_logits"].flatten(0, 1).softmax(-1)
         # [batch_size * num_queries, 4]
-        out_bbox = outputs["pred_boxes"].flatten(0, 1)  
+        out_bbox = outputs["pred_boxes"].flatten(0, 1)
 
         # 将真实框进行concat
         tgt_ids = torch.cat([v["labels"] for v in targets])
@@ -62,7 +62,7 @@ class HungarianMatcher(nn.Module):
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 class SetCriterion(nn.Module):
-    """ 
+    """
     计算DETR的损失。该过程分为两个步骤：
     1、计算了真实框和模型输出之间的匈牙利分配
     2、根据分配结果计算损失
@@ -127,7 +127,7 @@ class SetCriterion(nn.Module):
         }
         assert loss in loss_map, f'do you really want to compute {loss} loss?'
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
-    
+
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         assert 'pred_logits' in outputs
         # 获得输出中的分类部分
@@ -153,7 +153,7 @@ class SetCriterion(nn.Module):
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         pred_logits     = outputs['pred_logits']
         device          = pred_logits.device
-        
+
         # 计算每个batch真实框的数量
         tgt_lengths     = torch.as_tensor([len(v["labels"]) for v in targets], device=device)
         # 计算不是背景的预测数
@@ -171,7 +171,7 @@ class SetCriterion(nn.Module):
         src_boxes       = outputs['pred_boxes'][idx]
         # 取出真实框
         target_boxes    = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
-        
+
         # 预测框和所有的真实框计算l1的损失
         loss_bbox       = F.l1_loss(src_boxes, target_boxes, reduction='none')
         # 计算giou损失
@@ -205,7 +205,7 @@ def build_loss(num_classes, dec_layers=6, aux_loss=False):
         weight_dict.update(aux_weight_dict)
     # 要计算的三个内容
     losses      = ['labels', 'boxes', 'cardinality']
-    
+
     # 构建损失的类
     criterion   = SetCriterion(num_classes, matcher=matcher, weight_dict=weight_dict,
                              eos_coef=0.1, losses=losses)

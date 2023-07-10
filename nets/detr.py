@@ -28,18 +28,18 @@ class DETR(nn.Module):
         # 要使用的主干
         self.backbone       = build_backbone(backbone, position_embedding, hidden_dim, pretrained=pretrained)
         self.input_proj     = nn.Conv2d(self.backbone.num_channels, hidden_dim, kernel_size=1)
-        
+
         # 要使用的transformers模块
         self.transformer    = build_transformer(hidden_dim=hidden_dim, pre_norm=False)
         hidden_dim          = self.transformer.d_model
-        
+
         # 输出分类信息
         self.class_embed    = nn.Linear(hidden_dim, num_classes + 1)
         # 输出回归信息
         self.bbox_embed     = MLP(hidden_dim, hidden_dim, 4, 3)
         # 用于传入transformer进行查询的查询向量
         self.query_embed    = nn.Embedding(num_queries, hidden_dim)
-        
+
         # 查询向量的长度与是否使用辅助分支
         self.num_queries    = num_queries
         self.aux_loss       = aux_loss
@@ -75,7 +75,7 @@ class DETR(nn.Module):
     @unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
         return [{'pred_logits': a, 'pred_boxes': b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
-        
+
     def freeze_bn(self):
         for m in self.modules():
             if isinstance(m, nn.BatchNorm2d) or isinstance(m, FrozenBatchNorm2d):

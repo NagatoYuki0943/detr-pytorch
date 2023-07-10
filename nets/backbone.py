@@ -132,7 +132,7 @@ class BackboneBase(nn.Module):
             return_layers   = {"layer1": "0", "layer2": "1", "layer3": "2", "layer4": "3"}
         else:
             return_layers   = {'layer4': "0"}
-            
+
         # 用于指定返回的层
         self.body           = IntermediateLayerGetter(backbone, return_layers=return_layers)
         self.num_channels   = num_channels
@@ -155,7 +155,7 @@ class Backbone(BackboneBase):
         # 首先利用torchvision里面的model创建一个backbone模型
         backbone = getattr(torchvision.models, name)(
             replace_stride_with_dilation    = [False, False, dilation],
-            pretrained                      = pretrained, 
+            pretrained                      = pretrained,
             norm_layer                      = FrozenBatchNorm2d
         )
         # 根据选择的模型，获得通道数
@@ -185,7 +185,7 @@ def build_backbone(backbone, position_embedding, hidden_dim, train_backbone=True
     position_embedding  = build_position_encoding(position_embedding, hidden_dim)
     # 创建主干
     backbone            = Backbone(backbone, train_backbone, False, False, pretrained=pretrained)
-    
+
     # 用于将主干和位置编码模块进行结合
     model               = Joiner(backbone, position_embedding)
     model.num_channels = backbone.num_channels
