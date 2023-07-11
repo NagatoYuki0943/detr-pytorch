@@ -13,13 +13,13 @@ if __name__ == '__main__':
     hidden_dim          = 256
     num_classes         = 92
     num_queries         = 100
-    
+
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     m       = DETR(backbone, position_embedding, hidden_dim, num_classes=num_classes, num_queries=num_queries)
     for i in m.children():
         print(i)
         print('==============================')
-    
+
     dummy_input     = torch.randn(1, 3, input_shape[0], input_shape[1]).to(device)
     flops, params   = profile(m.to(device), (dummy_input, ), verbose=False)
     #--------------------------------------------------------#

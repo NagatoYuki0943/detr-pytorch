@@ -32,7 +32,7 @@ class TransformerEncoder(nn.Module):
                 src_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None):
         output = src
-        # 625, batch_size, 256 => ...(x6)... => 625, batch_size, 256
+        # [625, B, 256] => ...(x6)... => [625, B, 256]
         for layer in self.layers:
             output = layer(output, src_mask=mask, src_key_padding_mask=src_key_padding_mask, pos=pos)
 
@@ -69,21 +69,21 @@ class TransformerEncoderLayer(nn.Module):
                      src_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None):
         # 添加位置信息
-        # 625, batch_size, 256 => 625, batch_size, 256
+        # [625, B, 256] + [625, B, 256] => [625, B, 256]
         q = k = self.with_pos_embed(src, pos)
         # 使用自注意力机制模块
-        # 625, batch_size, 256 => 625, batch_size, 256
+        # [625, B, 256] => [625, B, 256]
         src2 = self.self_attn(q, k, value=src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask)[0]
         # 添加残差结构
-        # 625, batch_size, 256 => 625, batch_size, 256
+        # [625, B, 256] => [625, B, 256]
         src = src + self.dropout1(src2)
 
         # 添加FFN结构
-        # 625, batch_size, 256 => 625, batch_size, 2048 => 625, batch_size, 256
+        # [625, B, 256] => [625, B, 2048] => [625, B, 256]
         src = self.norm1(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
         # 添加残差结构
-        # 625, batch_size, 256 => 625, batch_size, 256
+        # [625, B, 256] => [625, B, 256]
         src = src + self.dropout2(src2)
         src = self.norm2(src)
         return src
@@ -126,25 +126,25 @@ class TransformerDecoder(nn.Module):
                 pos: Optional[Tensor] = None,
                 query_pos: Optional[Tensor] = None):
         output = tgt
-        intermediate = []
+        intermediate = [] # [100, B, 256] * [100, B, 256]
 
         for layer in self.layers:
-            output = layer(output, memory, tgt_mask=tgt_mask,
+            output = layer(output, memory, tgt_mask=tgt_mask,   # [100, B, 256] => [100, B, 256]
                            memory_mask=memory_mask,
                            tgt_key_padding_mask=tgt_key_padding_mask,
                            memory_key_padding_mask=memory_key_padding_mask,
                            pos=pos, query_pos=query_pos)
             if self.return_intermediate:
-                intermediate.append(self.norm(output))
+                intermediate.append(self.norm(output))  # 保存中间层的输出
 
         if self.norm is not None:
             output = self.norm(output)
             if self.return_intermediate:
-                intermediate.pop()
+                intermediate.pop() # 删除最后一个,添加norm最后一个的结果
                 intermediate.append(output)
 
         if self.return_intermediate:
-            return torch.stack(intermediate)
+            return torch.stack(intermediate) # [100, B, 256] * 6 => [6, 100, B, 256]    6指的是TransformerDecoderLayer的6个layer的输出
 
         return output.unsqueeze(0)
 
@@ -184,34 +184,35 @@ class TransformerDecoderLayer(nn.Module):
         #---------------------------------------------#
         #   q自己做一个self-attention
         #---------------------------------------------#
-        # tgt + query_embed
-        # 100, batch_size, 256 => 100, batch_size, 256
+        # 添加位置信息 tgt + query_embed
+        # [100, B, 256] + [100, B, 256] => [100, B, 256]
         q = k = self.with_pos_embed(tgt, query_pos)
-        # q = k = v = 100, batch_size, 256 => 100, batch_size, 256
+        # q = k = v = [100, B, 256] => [100, B, 256]
         tgt2 = self.self_attn(q, k, value=tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)[0]
         # 添加残差结构
-        # 100, batch_size, 256 => 100, batch_size, 256
+        # [100, B, 256] => [100, B, 256]
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
-        
+
         #---------------------------------------------#
-        #   q、k、v联合做一个self-attention
+        #   q、k、v联合做一个attention,
+        #   query是tgt,key和value是memory
         #---------------------------------------------#
-        # q = 100, batch_size, 256, k = 625, batch_size, 256, v = 625, batch_size, 256
-        # 输出的序列长度以q为准 => 100, batch_size, 256
-        tgt2 = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
-                                   key=self.with_pos_embed(memory, pos),
+        # q = [100, B, 256], k = [625, B, 256], v = [625, B, 256]
+        # 输出的序列长度以q为准 => [100, B, 256]
+        tgt2 = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),   # 添加位置信息
+                                   key=self.with_pos_embed(memory, pos),        # 添加位置信息
                                    value=memory, attn_mask=memory_mask,
                                    key_padding_mask=memory_key_padding_mask)[0]
         # 添加残差结构
-        # 100, batch_size, 256 => 100, batch_size, 256
+        # [100, B, 256] => [100, B, 256]
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
 
         #---------------------------------------------#
         #   做一个FFN
         #---------------------------------------------#
-        # 100, batch_size, 256 => 100, batch_size, 2048 => 100, batch_size, 256
+        # [100, B, 256] => [100, B, 2048 ]=> [100, B, 256]
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
@@ -282,22 +283,22 @@ class Transformer(nn.Module):
 
     def forward(self, src, mask, query_embed, pos_embed):
         bs, c, h, w = src.shape
-        # batch_size, 256, 25, 25 => batch_size, 256, 625 => 625, batch_size, 256
+        # [B, 256, 25, 25] => [B, 256, 625] => [625, B, 256]
         src         = src.flatten(2).permute(2, 0, 1)
-        # batch_size, 256, 25, 25 => batch_size, 256, 625 => 625, batch_size, 256
+        # [B, 256, 25, 25] => [B, 256, 625] => [625, B, 256]
         pos_embed   = pos_embed.flatten(2).permute(2, 0, 1)
-        # 100, 256 => 100, 1, 256 => 100, batch_size, 256
+        # [100, 256] => [100, 1, 256] => [100, B, 256] decoder中的query
         query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
-        # batch_size, 25, 25 => batch_size, 625
+        # [B, 25, 25] => [B, 625]
         mask        = mask.flatten(1)
-        # 100, batch_size, 256
+        # [100, B, 256] 创建了一个与查询向量一样shape的矩阵，作为输入
         tgt         = torch.zeros_like(query_embed)
 
-        # 625, batch_size, 256 => 625, batch_size, 256
+        # [625, B, 256] => [625, B, 256]
         memory      = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-        # 625, batch_size, 256 => 6, 100, batch_size, 256
+        # [625, B, 256] => [6, 100, B, 256]     6指的是TransformerDecoderLayer的6个layer的输出
         hs          = self.decoder(tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, query_pos=query_embed)
-        # 6, 100, batch_size, 256 => 6, batch_size, 100, 256
+        # [6, 100, B, 256] => [6, B, 100, 256], [625, B, 256] => [B, 256, 625] => [B, 256, 25, 25]
         return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
 
 def build_transformer(hidden_dim=256, dropout=0.1, nheads=8, dim_feedforward=2048, enc_layers=6, dec_layers=6, pre_norm=True):

@@ -37,7 +37,7 @@ class DETR(nn.Module):
         self.class_embed    = nn.Linear(hidden_dim, num_classes + 1)
         # 输出回归信息
         self.bbox_embed     = MLP(hidden_dim, hidden_dim, 4, 3)
-        # 用于传入transformer进行查询的查询向量
+        # 用于传入transformer进行查询的查询向量 [100, 256]
         self.query_embed    = nn.Embedding(num_queries, hidden_dim)
 
         # 查询向量的长度与是否使用辅助分支
@@ -48,27 +48,27 @@ class DETR(nn.Module):
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         # 传入主干网络中进行预测
-        # batch_size, 3, 800, 800 => batch_size, 2048, 25, 25
+        # [B, 3, 800, 800] => [[B, 2048, 25, 25]], [[B, 256, 25, 25]]
         features, pos = self.backbone(samples)
 
         # 将网络的结果进行分割，把特征和mask进行分开
-        # batch_size, 2048, 25, 25, batch_size, 25, 25
+        # [B, 2048, 25, 25] => [B, 2048, 25, 25], [B, 25, 25]
         src, mask = features[-1].decompose()
         assert mask is not None
         # 将主干的结果进行一个映射，然后和查询向量和位置向量传入transformer。
-        # batch_size, 2048, 25, 25 => batch_size, 256, 25, 25 => 6, batch_size, 100, 256
+        # [B, 2048, 25, 25] => [B, 256, 25, 25] => [6, B, 100, 256]     6指的是TransformerDecoderLayer的6个layer的输出
         hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
 
-        # 输出分类信息
-        # 6, batch_size, 100, 256 => 6, batch_size, 100, 21
+        # 输出分类信息 1个Linear
+        # [6, B, 100, 256] => [6, B, 100, num_classes+1]
         outputs_class = self.class_embed(hs)
-        # 输出回归信息
-        # 6, batch_size, 100, 256 => 6, batch_size, 100, 4
+        # 输出回归信息,调整到0~1之间
+        # [6, B, 100, 256] => [6, B, 100, 4]
         outputs_coord = self.bbox_embed(hs).sigmoid()
         # 只输出transformer最后一层的内容
-        # batch_size, 100, 21, batch_size, 100, 4
+        # [B, 100, num_classes+1], [B, 100, 4]
         out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}
-        if self.aux_loss:
+        if self.aux_loss: # 输出transformer前几层的内容
             out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)
         return out
 
@@ -80,3 +80,20 @@ class DETR(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.BatchNorm2d) or isinstance(m, FrozenBatchNorm2d):
                 m.eval()
+
+
+if __name__ == "__main__":
+    detr = DETR(
+        backbone="resnet50",
+        position_embedding="sine",
+        hidden_dim=256,
+        num_classes=20,
+        num_queries=100,
+    )
+    detr.eval()
+
+    x = torch.ones(1, 3, 800, 800)
+    with torch.inference_mode():
+        y = detr(x)
+    print(y["pred_logits"].shape)   # [B, 100, 21]
+    print(y["pred_boxes"].shape)    # [B, 100, 4]

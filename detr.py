@@ -60,8 +60,8 @@ class Detection_Transformers(object):
         self.__dict__.update(self._defaults)
         for name, value in kwargs.items():
             setattr(self, name, value)
-            self._defaults[name] = value 
-            
+            self._defaults[name] = value
+
         #---------------------------------------------------#
         #   获得种类和先验框的数量
         #---------------------------------------------------#
@@ -75,7 +75,7 @@ class Detection_Transformers(object):
         self.colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
         self.colors = list(map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)), self.colors))
         self.generate()
-        
+
         show_config(**self._defaults)
 
     #---------------------------------------------------#
@@ -126,10 +126,10 @@ class Detection_Transformers(object):
             #---------------------------------------------------------#
             outputs = self.net(images)
             results = self.bbox_util(outputs, images_shape, self.confidence)
-                                                    
-            if results[0] is None: 
+
+            if results[0] is None:
                 return image
-            
+
             _results    = results[0].cpu().numpy()
             top_label   = np.array(_results[:, 5], dtype = 'int32')
             top_conf    = _results[:, 4]
@@ -161,7 +161,7 @@ class Detection_Transformers(object):
                 left    = max(0, np.floor(left).astype('int32'))
                 bottom  = min(image.size[1], np.floor(bottom).astype('int32'))
                 right   = min(image.size[0], np.floor(right).astype('int32'))
-                
+
                 dir_save_path = "img_crop"
                 if not os.path.exists(dir_save_path):
                     os.makedirs(dir_save_path)
@@ -188,7 +188,7 @@ class Detection_Transformers(object):
             label_size = draw.textsize(label, font)
             label = label.encode('utf-8')
             print(label, top, left, bottom, right)
-            
+
             if top - label_size[1] >= 0:
                 text_origin = np.array([left, top - label_size[1]])
             else:
@@ -217,7 +217,7 @@ class Detection_Transformers(object):
 
             outputs = self.net(images)
             results = self.bbox_util(outputs, images_shape, self.confidence)
-            
+
         t1 = time.time()
         for _ in range(test_interval):
             with torch.no_grad():
@@ -226,10 +226,10 @@ class Detection_Transformers(object):
                 if self.cuda:
                     images          = images.cuda()
                     images_shape    = images_shape.cuda()
-                
+
                 outputs = self.net(images)
                 results = self.bbox_util(outputs, images_shape, self.confidence)
-                            
+
         t2 = time.time()
         tact_time = (t2 - t1) / test_interval
         return tact_time
@@ -241,7 +241,7 @@ class Detection_Transformers(object):
         im                  = torch.zeros(1, 3, *self.input_shape).to('cpu')  # image size(1, 3, 512, 512) BCHW
         input_layer_names   = ["images"]
         output_layer_names  = ["output"]
-        
+
         # Export the model
         print(f'Starting export with onnx {onnx.__version__}.')
         torch.onnx.export(self.net,
@@ -273,7 +273,7 @@ class Detection_Transformers(object):
         print('Onnx model save as {}'.format(model_path))
 
     def get_map_txt(self, image_id, image, class_names, map_out_path):
-        f = open(os.path.join(map_out_path, "detection-results/"+image_id+".txt"),"w") 
+        f = open(os.path.join(map_out_path, "detection-results/"+image_id+".txt"),"w")
         image_shape = np.array(np.shape(image)[0:2])
         #---------------------------------------------------------#
         #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
@@ -301,10 +301,10 @@ class Detection_Transformers(object):
             #---------------------------------------------------------#
             outputs = self.net(images)
             results = self.bbox_util(outputs, images_shape, self.confidence)
-                                                    
-            if results[0] is None: 
-                return 
-            
+
+            if results[0] is None:
+                return
+
             _results    = results[0].cpu().numpy()
             top_label   = np.array(_results[:, 5], dtype = 'int32')
             top_conf    = _results[:, 4]
@@ -322,4 +322,4 @@ class Detection_Transformers(object):
             f.write("%s %s %s %s %s %s\n" % (predicted_class, score[:6], str(int(left)), str(int(top)), str(int(right)),str(int(bottom))))
 
         f.close()
-        return 
+        return
