@@ -20,6 +20,9 @@ def _get_activation_fn(activation):
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
+#-----------------------------#
+#   对backbone的输出进行编码
+#-----------------------------#
 class TransformerEncoder(nn.Module):
     def __init__(self, encoder_layer, num_layers, norm=None):
         super().__init__()
@@ -40,6 +43,9 @@ class TransformerEncoder(nn.Module):
             output = self.norm(output)
         return output
 
+#-----------------------------#
+#   自注意力
+#-----------------------------#
 class TransformerEncoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False):
@@ -110,6 +116,9 @@ class TransformerEncoderLayer(nn.Module):
             return self.forward_pre(src, src_mask, src_key_padding_mask, pos)
         return self.forward_post(src, src_mask, src_key_padding_mask, pos)
 
+#-----------------------------#
+#   对backbone的输出进行编码
+#-----------------------------#
 class TransformerDecoder(nn.Module):
     def __init__(self, decoder_layer, num_layers, norm=None, return_intermediate=False):
         super().__init__()
@@ -126,7 +135,9 @@ class TransformerDecoder(nn.Module):
                 pos: Optional[Tensor] = None,
                 query_pos: Optional[Tensor] = None):
         output = tgt
-        intermediate = [] # [100, B, 256] * [100, B, 256]
+
+        # 中间层输出    [100, B, 256] * 6
+        intermediate = []
 
         for layer in self.layers:
             output = layer(output, memory, tgt_mask=tgt_mask,   # [100, B, 256] => [100, B, 256]
@@ -148,6 +159,9 @@ class TransformerDecoder(nn.Module):
 
         return output.unsqueeze(0)
 
+#-----------------------------#
+#   自注意力+注意力
+#-----------------------------#
 class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu", normalize_before=False):
         super().__init__()
