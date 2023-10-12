@@ -124,7 +124,9 @@ class Detection_Transformers(object):
             #---------------------------------------------------------#
             #   将图像输入网络当中进行预测！
             #---------------------------------------------------------#
+            # outputs: {'pred_logits': [B, 100, num_classes+1], 'pred_boxes': [B, 100, 4]}
             outputs = self.net(images)
+            # [[keep, 6]]   6: y1 x1 y2 x2 score label
             results = self.bbox_util(outputs, images_shape, self.confidence)
 
             if results[0] is None:
@@ -156,7 +158,7 @@ class Detection_Transformers(object):
         #---------------------------------------------------------#
         if crop:
             for i, c in list(enumerate(top_label)):
-                top, left, bottom, right = top_boxes[i]
+                top, left, bottom, right = top_boxes[i] # y1 x1 y2 x2
                 top     = max(0, np.floor(top).astype('int32'))
                 left    = max(0, np.floor(left).astype('int32'))
                 bottom  = min(image.size[1], np.floor(bottom).astype('int32'))

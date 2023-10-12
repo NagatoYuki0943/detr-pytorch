@@ -35,7 +35,12 @@ class TransformerEncoder(nn.Module):
                 src_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None):
         output = src
-        # [625, B, 256] => ...(x6)... => [625, B, 256]
+        #-------------------------------------------------------------#
+        #   src:                    [625, B, 256]
+        #   src_mask:               None
+        #   src_key_padding_mask:   [B, 625]
+        #   pos:                    [625, B, 256] => ...(x6)... => [625, B, 256]
+        #-------------------------------------------------------------#
         for layer in self.layers:
             output = layer(output, src_mask=mask, src_key_padding_mask=src_key_padding_mask, pos=pos)
 
@@ -74,22 +79,28 @@ class TransformerEncoderLayer(nn.Module):
                      src_mask: Optional[Tensor] = None,
                      src_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None):
-        # 添加位置信息
+        """
+        Args:
+            src (Tensor): x                                                                     [625, B, 256]
+            src_mask (Optional[Tensor], optional): _description_. Defaults to None.             None
+            src_key_padding_mask (Optional[Tensor], optional): _description_. Defaults to None. [B, 625]
+            pos (Optional[Tensor], optional): _description_. Defaults to None.                  [625, B, 256]
+
+        Returns:
+            Tensor: [625, B, 256]
+        """
+        # q和k添加位置信息
         # [625, B, 256] + [625, B, 256] => [625, B, 256]
         q = k = self.with_pos_embed(src, pos)
         # 使用自注意力机制模块
         # [625, B, 256] => [625, B, 256]
         src2 = self.self_attn(q, k, value=src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask)[0]
-        # 添加残差结构
-        # [625, B, 256] => [625, B, 256]
         src = src + self.dropout1(src2)
 
         # 添加FFN结构
         # [625, B, 256] => [625, B, 2048] => [625, B, 256]
         src = self.norm1(src)
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
-        # 添加残差结构
-        # [625, B, 256] => [625, B, 256]
         src = src + self.dropout2(src2)
         src = self.norm2(src)
         return src
@@ -135,6 +146,17 @@ class TransformerDecoder(nn.Module):
                 pos: Optional[Tensor] = None,
                 query_pos: Optional[Tensor] = None):
         output = tgt
+        #-----------------------------------------------------------#
+        #   Decoder
+        #   tgt:                    [100, B, 256]
+        #   tgt_mask:               None
+        #   memory_mask:            None
+        #   tgt_key_padding_mask:   None
+        #   memory:                 [625, B, 256]
+        #   memory_key_padding_mask:[B, 625]
+        #   pos:                    [625, B, 256]
+        #   query_pos:              [100, B, 256] => ...(x6)... => [6, 100, B, 256]   6指的是TransformerDecoderLayer的6个layer的输出
+        #-----------------------------------------------------------#
 
         # 中间层输出    [100, B, 256] * 6
         intermediate = []
@@ -195,31 +217,43 @@ class TransformerDecoderLayer(nn.Module):
                      memory_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None,
                      query_pos: Optional[Tensor] = None):
+        """
+        Args:
+            tgt (Tensor): shape like query_pos, init all zeros                                      [100, B, 256]
+            memory (Tensor): encoder's output                                                       [625, B, 256]
+            tgt_mask (Optional[Tensor], optional): _description_. Defaults to None.                 None
+            memory_mask (Optional[Tensor], optional): _description_. Defaults to None.              None
+            tgt_key_padding_mask (Optional[Tensor], optional): _description_. Defaults to None.     None
+            memory_key_padding_mask (Optional[Tensor], optional): _description_. Defaults to None.  [B, 625]
+            pos (Optional[Tensor], optional): position code. Defaults to None.                      [625, B, 256]
+            query_pos (Optional[Tensor], optional): query_pos. Defaults to None.                    [100, B, 256]
+                                                    query_pos的输入值为query_embed,应该为查询向量
+                                                    相比之下tgt更像位置编码,query_pos更像查询向量
+        Returns:
+            Tensor: [6, 100, B, 256]   6指的是TransformerDecoderLayer的6个layer的输出
+        """
         #---------------------------------------------#
         #   q自己做一个self-attention
         #---------------------------------------------#
-        # 添加位置信息 tgt + query_embed
+        # q和k添加位置信息,是独立的位置编码
         # [100, B, 256] + [100, B, 256] => [100, B, 256]
         q = k = self.with_pos_embed(tgt, query_pos)
-        # q = k = v = [100, B, 256] => [100, B, 256]
+        # 3 * [100, B, 256] => [100, B, 256]
         tgt2 = self.self_attn(q, k, value=tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask)[0]
-        # 添加残差结构
-        # [100, B, 256] => [100, B, 256]
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
 
         #---------------------------------------------#
         #   q、k、v联合做一个attention,
-        #   query是tgt,key和value是memory
+        #   query是tgt+query_pos,key和value是memory
+        #   q = [100, B, 256]
+        #   k = [625, B, 256]
+        #   v = [625, B, 256] => [100, B, 256]
         #---------------------------------------------#
-        # q = [100, B, 256], k = [625, B, 256], v = [625, B, 256]
-        # 输出的序列长度以q为准 => [100, B, 256]
         tgt2 = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),   # 添加位置信息
-                                   key=self.with_pos_embed(memory, pos),        # 添加位置信息
+                                   key=self.with_pos_embed(memory, pos),        # 添加位置信息,和q的位置编码不同
                                    value=memory, attn_mask=memory_mask,
                                    key_padding_mask=memory_key_padding_mask)[0]
-        # 添加残差结构
-        # [100, B, 256] => [100, B, 256]
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
 
@@ -296,6 +330,16 @@ class Transformer(nn.Module):
                 nn.init.xavier_uniform_(p)
 
     def forward(self, src, mask, query_embed, pos_embed):
+        """
+        Args:
+            src (Tensor): x                 [B, 256, 25, 25]
+            mask (Tensor): x'mask           [B, 25, 25]
+            query_embed (Tensor): 查询向量   [100, 256]
+            pos_embed (Tensor):   位置编码   [B, 256, 25, 25]
+
+        Returns:
+            Tensor: [6, B, 100, 256]  6指的是TransformerDecoderLayer的6个layer的输出
+        """
         bs, c, h, w = src.shape
         # [B, 256, 25, 25] => [B, 256, 625] => [625, B, 256]
         src         = src.flatten(2).permute(2, 0, 1)
@@ -305,13 +349,30 @@ class Transformer(nn.Module):
         query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
         # [B, 25, 25] => [B, 625]
         mask        = mask.flatten(1)
-        # [100, B, 256] 创建了一个与查询向量一样shape的矩阵，作为输入
+
+        #-----------------------------------------------------------#
+        #   [100, B, 256] 创建了一个与query_embed一样shape的矩阵
+        #-----------------------------------------------------------#
         tgt         = torch.zeros_like(query_embed)
 
-        # [625, B, 256] => [625, B, 256]
+        #-----------------------------------------------------------#
+        #   Encoder
+        #   src:                    [625, B, 256]
+        #   src_key_padding_mask:   [B, 625]
+        #   pos:                    [625, B, 256] => [625, B, 256]
+        #-----------------------------------------------------------#
         memory      = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-        # [625, B, 256] => [6, 100, B, 256]     6指的是TransformerDecoderLayer的6个layer的输出
+
+        #-----------------------------------------------------------#
+        #   Decoder
+        #   tgt:                    [100, B, 256]
+        #   memory:                 [625, B, 256]
+        #   memory_key_padding_mask:[B, 625]
+        #   pos:                    [625, B, 256]
+        #   query_pos:              [100, B, 256] => [6, 100, B, 256]   6指的是TransformerDecoderLayer的6个layer的输出
+        #-----------------------------------------------------------#
         hs          = self.decoder(tgt, memory, memory_key_padding_mask=mask, pos=pos_embed, query_pos=query_embed)
+
         # [6, 100, B, 256] => [6, B, 100, 256], [625, B, 256] => [B, 256, 625] => [B, 256, 25, 25]
         return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
 
