@@ -17,15 +17,15 @@ class DecodeBox(nn.Module):
     def forward(self, outputs, target_sizes, confidence):
         """
         Args:
-            outputs (dict): {'pred_logits': [B, 100, num_classes+1], 'pred_boxes': [B, 100, 4]}
+            outputs (dict):        {'pred_logits': [B, 100, num_classes+1], 'pred_boxes': [B, 100, 4]}
             target_sizes (Tensor): [H, W]
-            confidence (float): _description_
+            confidence (float):    得分阈值
 
         Returns:
             list[Tensor]:
         """
         # out_logits: [B, 100, num_classes+1]
-        # pred_boxes: [B, 100, 4]
+        # out_bbox:   [B, 100, 4]
         out_logits, out_bbox = outputs['pred_logits'], outputs['pred_boxes']
 
         assert len(out_logits) == len(target_sizes)
